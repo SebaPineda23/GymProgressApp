@@ -61,7 +61,7 @@ public class RoutineController {
     @PutMapping("/{id}")
     public ResponseEntity<?> actualizarRutina(
             @PathVariable Long id,
-            @AuthenticationPrincipal(expression = "user") User currentUser,
+            @AuthenticationPrincipal(expression = "users") User currentUser,
             @Valid @RequestBody DTORoutine dtoRoutine
     ) {
         try {

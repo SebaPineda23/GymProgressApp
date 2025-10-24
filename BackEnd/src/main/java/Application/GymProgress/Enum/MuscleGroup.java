@@ -2,18 +2,18 @@ package Application.GymProgress.Enum;
 
 public enum MuscleGroup {
     PECTORAL,
-    DORSAL,
-    DELTOIDS,
+    ESPALDA,
+    HOMBROS,
     BICEPS,
     TRICEPS,
-    QUADRICEPS,
-    HAMSTRINGS,
-    GLUTES,
-    CALVES,
-    ABS,
-    OBLIQUES,
-    TRAPEZIUS,
-    FOREARMS,
+    CUADRICEPS,
+    ISQUIOTIBIALES,
+    GLUTEOS,
+    PANTORRILLAS,
+    ABDOMINALES,
+    OBLICUOS,
+    TRAPECIO,
+    ANTEBRAZOS,
 
     // Grupos compuestos
     UPPER_BODY,      // Torso completo
