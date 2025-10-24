@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
+@CrossOrigin("*")
 @RequestMapping("/gymProgress/exercises")
 @RequiredArgsConstructor
 public class ExerciseController {

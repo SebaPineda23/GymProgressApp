@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 
 @RestController
+@CrossOrigin("*")
 @RequestMapping("/gymProgress/progress")
 public class ProgressController {
 

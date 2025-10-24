@@ -15,6 +15,7 @@ import java.util.List;
 
 
 @RestController
+@CrossOrigin("*")
 @RequestMapping("/gymProgress/routines")
 @RequiredArgsConstructor
 public class RoutineController {
