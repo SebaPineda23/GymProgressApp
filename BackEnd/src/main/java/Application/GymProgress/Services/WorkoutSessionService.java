@@ -9,6 +9,8 @@ import Application.GymProgress.Repositories.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -24,7 +26,7 @@ public class WorkoutSessionService {
     private final SetRecordRepository setRecordRepository;
 
     @Transactional
-    public WorkoutSessionResponseDTO createWorkoutSession(WorkoutSessionRequestDTO request) {
+    public WorkoutSessionResponseDTO createWorkoutSession(WorkoutSessionRequestDTO request, LocalDate fechaEntrenamiento) {
         User user = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
@@ -32,7 +34,7 @@ public class WorkoutSessionService {
                 .orElseThrow(() -> new RuntimeException("Rutina no encontrada"));
 
         WorkoutSession session = WorkoutSession.builder()
-                .date(request.getDate())
+                .date(fechaEntrenamiento)
                 .notes(request.getNotes())
                 .completed(false)
                 .user(user)

@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -34,4 +35,10 @@ public class ExerciseExecution {
 
     @OneToMany(mappedBy = "exerciseExecution", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<SetRecord> setRecords;
+    public List<SetRecord> getSetRecords() {
+        if (this.setRecords == null) {
+            this.setRecords = new ArrayList<>();
+        }
+        return this.setRecords;
+    }
 }

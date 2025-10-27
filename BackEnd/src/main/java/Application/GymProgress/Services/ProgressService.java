@@ -23,8 +23,6 @@ public class ProgressService {
     private final WorkoutSessionRepository workoutSessionRepository;
     private final UserRepository userRepository;
 
-    // ==================== MÉTODOS PÚBLICOS PRINCIPALES ====================
-
     @Transactional
     public ProgresoSemanalDTO obtenerProgresoSemanal(Long userId, LocalDate fecha) {
         LocalDate inicioSemana = fecha.with(DayOfWeek.MONDAY);
@@ -170,8 +168,6 @@ public class ProgressService {
         estadisticas.put("nivelActual", usuario.getLevel());
         estadisticas.put("pesoInicial", usuario.getInitialWeight());
         estadisticas.put("pesoActual", usuario.getActualWeight());
-
-// MÉTRICAS ÚTILES 🎯
         estadisticas.put("consistencia", Math.round(porcentajeConsistencia) + "%");
         estadisticas.put("frecuenciaSemanal", Math.round(frecuenciaSemanal * 10.0) / 10.0 + " días/semana");
         estadisticas.put("nivelConsistencia", nivelConsistencia);
@@ -181,7 +177,6 @@ public class ProgressService {
         return estadisticas;
     }
 
-    // ==================== MÉTODOS PRIVADOS AUXILIARES ====================
 
     private ProgresoSemanalDTO calcularProgresoSemanal(List<WorkoutSession> sesiones, LocalDate inicio, LocalDate fin, Long userId) {
         ProgresoSemanalDTO progreso = new ProgresoSemanalDTO();
@@ -272,7 +267,6 @@ public class ProgressService {
         return "ESTABLE";
     }
 
-    // ==================== MÉTRICAS ÚTILES ====================
 
     private double calcularConsistencia(List<WorkoutSession> sesiones) {
         if (sesiones.isEmpty()) return 0.0;
@@ -357,10 +351,10 @@ public class ProgressService {
     }
 
     private String evaluarNivelConsistencia(double porcentaje) {
-        if (porcentaje >= 90) return "🔥 EXCELENTE";
-        if (porcentaje >= 75) return "✅ BUENA";
-        if (porcentaje >= 60) return "⚠️  REGULAR";
-        return "❌ A MEJORAR";
+        if (porcentaje >= 90) return "EXCELENTE";
+        if (porcentaje >= 75) return "BUENA";
+        if (porcentaje >= 60) return "REGULAR";
+        return "A MEJORAR";
     }
 
     private String generarRecomendacion(double consistencia, double frecuencia) {

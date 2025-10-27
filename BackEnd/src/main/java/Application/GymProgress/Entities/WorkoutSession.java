@@ -33,7 +33,7 @@ public class WorkoutSession {
     @ManyToOne
     @JoinColumn(name = "routine_id", nullable = false)
     @JsonIgnore
-    private Routine routine; // La rutina que se está ejecutando
+    private Routine routine;
 
     @OneToMany(mappedBy = "workoutSession", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<ExerciseExecution> exerciseExecutions;

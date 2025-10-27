@@ -21,6 +21,6 @@ public class CustomUserDetailsService implements UserDetailsService {
         System.out.println("🔐 UserDetailsService - User: " + user.getUsername());
         System.out.println("🔐 UserDetailsService - Roles: " + user.getRoleSet());
 
-        return user; // ← Tu entidad User ya implementa UserDetails
+        return user;
     }
 }

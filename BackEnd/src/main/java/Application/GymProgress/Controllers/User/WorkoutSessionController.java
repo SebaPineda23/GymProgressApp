@@ -4,11 +4,13 @@ package Application.GymProgress.Controllers.User;
 import Application.GymProgress.DTOs.SetRecordRequestDTO;
 import Application.GymProgress.DTOs.WorkoutSessionRequestDTO;
 import Application.GymProgress.DTOs.WorkoutSessionResponseDTO;
+import Application.GymProgress.Entities.WorkoutSession;
 import Application.GymProgress.Services.WorkoutSessionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -21,8 +23,28 @@ public class WorkoutSessionController {
 
     @PostMapping
     public ResponseEntity<WorkoutSessionResponseDTO> createWorkoutSession(@RequestBody WorkoutSessionRequestDTO request) {
-        WorkoutSessionResponseDTO session = workoutSessionService.createWorkoutSession(request);
-        return ResponseEntity.ok(session);
+        try {
+            System.out.println("🔍 DEBUG - Request recibido:");
+            System.out.println("  userId: " + request.getUserId());
+            System.out.println("  routineId: " + request.getRoutineId());
+            System.out.println("  date: " + request.getDate());
+            System.out.println("  notes: " + request.getNotes());
+
+            LocalDate fechaEntrenamiento = request.getDate() != null ?
+                    request.getDate() :
+                    LocalDate.now();
+
+            System.out.println("DEBUG - Fecha a usar: " + fechaEntrenamiento);
+
+            WorkoutSessionResponseDTO sesion = workoutSessionService.createWorkoutSession(request, fechaEntrenamiento);
+            return ResponseEntity.ok(sesion);
+
+        } catch (Exception e) {
+            System.out.println("ERROR en createWorkoutSession:");
+            e.printStackTrace();
+
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     @PostMapping("/set-record")
