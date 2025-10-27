@@ -4,6 +4,7 @@ import Application.GymProgress.Enum.Level;
 import Application.GymProgress.Enum.MuscleGroup;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -14,6 +15,7 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 @Data
+@Builder
 public class Exercise {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -29,6 +31,4 @@ public class Exercise {
     private Set<MuscleGroup> muscleGroupSet;
     @Enumerated(EnumType.STRING)
     private Level level;
-    @OneToMany(mappedBy = "exercise")
-    private List<Register> registerList;
 }

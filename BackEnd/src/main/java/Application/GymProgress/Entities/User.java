@@ -6,7 +6,6 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
-
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -31,13 +30,18 @@ public class User implements UserDetails {
     private double initialWeight;
     private double actualWeight;
     private int weeksTrained;
+
     @Enumerated(EnumType.STRING)
     private Level level;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @Enumerated(EnumType.STRING)
     private Set<Role> roleSet;
+
+    // CAMBIO: Ahora tiene WorkoutSession en lugar de Register
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Register> registerList;
+    private List<WorkoutSession> workoutSessions;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Routine> routineList;
 

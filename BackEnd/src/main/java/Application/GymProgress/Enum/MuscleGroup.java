@@ -9,11 +9,12 @@ public enum MuscleGroup {
     CUADRICEPS,
     ISQUIOTIBIALES,
     GLUTEOS,
-    PANTORRILLAS,
+    GEMELOS,
     ABDOMINALES,
     OBLICUOS,
     TRAPECIO,
     ANTEBRAZOS,
+    DELTOIDES,
 
     // Grupos compuestos
     UPPER_BODY,      // Torso completo
