@@ -1,18 +1,16 @@
 package Application.GymProgress.Services;
 
-import Application.GymProgress.DTOs.ProgresoMensualDTO;
-import Application.GymProgress.DTOs.ProgresoSemanalDTO;
+import Application.GymProgress.DTOs.*;
 import Application.GymProgress.Entities.*;
+import Application.GymProgress.Enum.Level;
 import Application.GymProgress.Repositories.UserRepository;
+import Application.GymProgress.Repositories.WeightRecordRepository;
 import Application.GymProgress.Repositories.WorkoutSessionRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.YearMonth;
-import java.time.temporal.ChronoUnit;
+import java.time.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -22,184 +20,299 @@ public class ProgressService {
 
     private final WorkoutSessionRepository workoutSessionRepository;
     private final UserRepository userRepository;
+    private final WeightRecordRepository weightRecordRepository;
 
     @Transactional
-    public ProgresoSemanalDTO obtenerProgresoSemanal(Long userId, LocalDate fecha) {
-        LocalDate inicioSemana = fecha.with(DayOfWeek.MONDAY);
-        LocalDate finSemana = fecha.with(DayOfWeek.SUNDAY);
+    public Map<String, Object> obtenerDashboardCompleto(Long userId, Optional<String> fechaParam) {
+        LocalDate fechaReferencia;
 
-        List<WorkoutSession> sesionesSemana = workoutSessionRepository.findByUserId(userId).stream()
-                .filter(sesion -> !sesion.getDate().isBefore(inicioSemana) && !sesion.getDate().isAfter(finSemana))
-                .filter(WorkoutSession::isCompleted)
-                .collect(Collectors.toList());
-
-        return calcularProgresoSemanal(sesionesSemana, inicioSemana, finSemana, userId);
-    }
-
-    @Transactional
-    public ProgresoMensualDTO obtenerProgresoMensual(Long userId, YearMonth mes) {
-        LocalDate inicioMes = mes.atDay(1);
-        LocalDate finMes = mes.atEndOfMonth();
-
-        List<WorkoutSession> sesionesMes = workoutSessionRepository.findByUserId(userId).stream()
-                .filter(sesion -> !sesion.getDate().isBefore(inicioMes) && !sesion.getDate().isAfter(finMes))
-                .filter(WorkoutSession::isCompleted)
-                .collect(Collectors.toList());
-
-        ProgresoMensualDTO progreso = new ProgresoMensualDTO();
-        progreso.setMes(mes.atDay(1));
-
-        // Calcular semanas del mes
-        List<ProgresoSemanalDTO> semanas = new ArrayList<>();
-        LocalDate fechaActual = mes.atDay(1);
-
-        int contadorSemanas = 0;
-        while (fechaActual.getMonth() == mes.getMonth() && contadorSemanas < 5) {
-            LocalDate inicioSemana = fechaActual.with(DayOfWeek.MONDAY);
-            LocalDate finSemana = fechaActual.with(DayOfWeek.SUNDAY);
-
-            List<WorkoutSession> sesionesSemana = sesionesMes.stream()
-                    .filter(sesion -> !sesion.getDate().isBefore(inicioSemana) &&
-                            !sesion.getDate().isAfter(finSemana))
-                    .collect(Collectors.toList());
-
-            if (!sesionesSemana.isEmpty()) {
-                ProgresoSemanalDTO semana = calcularProgresoSemanal(sesionesSemana, inicioSemana, finSemana, userId);
-                semanas.add(semana);
-            }
-
-            fechaActual = fechaActual.plusWeeks(1);
-            contadorSemanas++;
-        }
-        progreso.setSemanas(semanas);
-
-        // Calcular métricas mensuales
-        double totalPesoLevantado = semanas.stream()
-                .mapToDouble(ProgresoSemanalDTO::getTotalPesoLevantado)
-                .sum();
-
-        int totalEntrenamientos = semanas.stream()
-                .mapToInt(ProgresoSemanalDTO::getEntrenamientosCompletados)
-                .sum();
-
-        double promedioFuerza = semanas.stream()
-                .mapToDouble(ProgresoSemanalDTO::getProgresoFuerza)
-                .average()
-                .orElse(0.0);
-
-        progreso.setTotalPesoLevantado(Math.round(totalPesoLevantado * 100.0) / 100.0);
-        progreso.setTotalEntrenamientos(totalEntrenamientos);
-        progreso.setPromedioFuerzaSemanal(Math.round(promedioFuerza * 100.0) / 100.0);
-
-        // Calcular cambio de peso del usuario
-        User usuario = userRepository.findById(userId).orElseThrow();
-        progreso.setPesoFinalUsuario(usuario.getActualWeight());
-        progreso.setPesoInicialUsuario(usuario.getInitialWeight());
-        progreso.setCambioPeso(Math.round((progreso.getPesoFinalUsuario() - progreso.getPesoInicialUsuario()) * 100.0) / 100.0);
-
-        // Determinar tendencia
-        progreso.setTendencia(determinarTendencia(semanas));
-
-        return progreso;
-    }
-
-    @Transactional
-    public List<ProgresoSemanalDTO> obtenerHistorialSemanal(Long userId, int semanas) {
-        List<ProgresoSemanalDTO> historial = new ArrayList<>();
-        LocalDate fechaActual = LocalDate.now();
-
-        // Límite de semanas para evitar loops largos
-        int maxSemanas = Math.min(semanas, 8);
-
-        for (int i = 0; i < maxSemanas; i++) {
-            ProgresoSemanalDTO progresoSemanal = obtenerProgresoSemanal(userId, fechaActual.minusWeeks(i));
-            if (progresoSemanal.getEntrenamientosCompletados() > 0) {
-                historial.add(progresoSemanal);
+        // Si no se proporciona fecha, usar la fecha actual
+        if (fechaParam.isEmpty()) {
+            fechaReferencia = LocalDate.now();
+        } else {
+            // Parsear la fecha proporcionada
+            try {
+                fechaReferencia = LocalDate.parse(fechaParam.get());
+            } catch (Exception e) {
+                throw new RuntimeException("Formato de fecha inválido. Use YYYY-MM-DD");
             }
         }
 
-        return historial;
-    }
+        YearMonth mesReferencia = YearMonth.from(fechaReferencia);
 
-    @Transactional
-    public Map<String, Object> obtenerResumenProgreso(Long userId) {
-        ProgresoSemanalDTO estaSemana = obtenerProgresoSemanal(userId, LocalDate.now());
-        ProgresoMensualDTO esteMes = obtenerProgresoMensual(userId, YearMonth.now());
-        List<ProgresoSemanalDTO> ultimasSemanas = obtenerHistorialSemanal(userId, 4);
+        // Obtener usuario
+        User usuario = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        User usuario = userRepository.findById(userId).orElseThrow();
+        // Obtener todas las sesiones del usuario
+        List<WorkoutSession> todasLasSesiones = workoutSessionRepository.findByUserId(userId).stream()
+                .filter(WorkoutSession::isCompleted)
+                .collect(Collectors.toList());
+
+        // ============================================
+        // 1️⃣ MÉTRICAS GENERALES (metricsData)
+        // ============================================
+
+        // Semana de referencia (basada en la fecha proporcionada o actual)
+        LocalDate inicioSemanaReferencia = fechaReferencia.with(DayOfWeek.MONDAY);
+        LocalDate finSemanaReferencia = fechaReferencia.with(DayOfWeek.SUNDAY);
+
+        List<WorkoutSession> sesionesSemanaReferencia = todasLasSesiones.stream()
+                .filter(s -> !s.getDate().isBefore(inicioSemanaReferencia) && !s.getDate().isAfter(finSemanaReferencia))
+                .collect(Collectors.toList());
+
+        // Semana anterior a la de referencia
+        LocalDate inicioSemanaAnterior = inicioSemanaReferencia.minusWeeks(1);
+        LocalDate finSemanaAnterior = finSemanaReferencia.minusWeeks(1);
+
+        List<WorkoutSession> sesionesSemanaAnterior = todasLasSesiones.stream()
+                .filter(s -> !s.getDate().isBefore(inicioSemanaAnterior) && !s.getDate().isAfter(finSemanaAnterior))
+                .collect(Collectors.toList());
+
+        int entrenamientosCompletados = sesionesSemanaReferencia.size();
+        int entrenamientosSemanaAnterior = sesionesSemanaAnterior.size();
+
+        double totalPesoSemanaReferencia = calcularPesoTotal(sesionesSemanaReferencia);
+        double totalPesoSemanaAnterior = calcularPesoTotal(sesionesSemanaAnterior);
+
+        int totalSeriesCompletadas = sesionesSemanaReferencia.stream()
+                .mapToInt(s -> s.getSetRecords().size())
+                .sum();
+
+        double progresoFuerza = calcularProgresoFuerzaSimple(sesionesSemanaReferencia);
+
+        String tendenciaPeso = totalPesoSemanaReferencia >= totalPesoSemanaAnterior ? "up" : "down";
+
+        Map<String, Object> metricsData = Map.of(
+                "entrenamientosCompletados", entrenamientosCompletados,
+                "entrenamientosSemanaAnterior", entrenamientosSemanaAnterior,
+                "totalPesoLevantado", Math.round(totalPesoSemanaReferencia * 100.0) / 100.0,
+                "tendenciaPeso", tendenciaPeso,
+                "totalSeriesCompletadas", totalSeriesCompletadas,
+                "progresoFuerza", Math.round(progresoFuerza * 100.0) / 100.0
+        );
+
+        // ============================================
+        // 2️⃣ PROGRESO SEMANAL (progresoSemanalData)
+        // ============================================
+
+        // Array de entrenamientos por día de la semana de referencia
+        int[] entrenamientosPorDia = new int[7];
+        for (WorkoutSession sesion : sesionesSemanaReferencia) {
+            int diaSemana = sesion.getDate().getDayOfWeek().getValue() - 1; // 0=Lun, 6=Dom
+            entrenamientosPorDia[diaSemana]++;
+        }
+
+        int totalRepeticiones = sesionesSemanaReferencia.stream()
+                .flatMap(s -> s.getSetRecords().stream())
+                .mapToInt(SetRecord::getRealRepetitions)
+                .sum();
+
+        double volumenEntrenamiento = totalPesoSemanaReferencia;
+
+        Map<String, Object> progresoSemanalData = Map.of(
+                "dias", Arrays.asList("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"),
+                "entrenamientos", Arrays.stream(entrenamientosPorDia).boxed().collect(Collectors.toList()),
+                "totalPesoLevantado", Math.round(totalPesoSemanaReferencia * 100.0) / 100.0,
+                "totalRepeticiones", totalRepeticiones,
+                "volumenEntrenamiento", Math.round(volumenEntrenamiento * 100.0) / 100.0,
+                "pesoPromedioUsuario", usuario.getActualWeight()
+        );
+
+        // ============================================
+        // 3️⃣ EVOLUCIÓN MENSUAL (evolucionMensualData)
+        // ============================================
+
+        // Últimos 6 meses
+        List<String> meses = Arrays.asList("Ene", "Feb", "Mar", "Abr", "May", "Jun");
+
+        // Calcular evolución del peso (simulado con degradado lineal)
+        double pesoInicial = usuario.getInitialWeight();
+        double pesoFinal = usuario.getActualWeight();
+        double diferenciaPeso = pesoFinal - pesoInicial;
+
+        List<Double> pesoUsuarioPorMes = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            double pesoMes = pesoInicial + (diferenciaPeso * i / 5.0);
+            pesoUsuarioPorMes.add(Math.round(pesoMes * 10.0) / 10.0);
+        }
+
+        // Calcular promedio de fuerza semanal del mes de referencia
+        LocalDate inicioMes = mesReferencia.atDay(1);
+        LocalDate finMes = mesReferencia.atEndOfMonth();
+
+        List<WorkoutSession> sesionesMesReferencia = todasLasSesiones.stream()
+                .filter(s -> !s.getDate().isBefore(inicioMes) && !s.getDate().isAfter(finMes))
+                .collect(Collectors.toList());
+
+        double promedioFuerzaSemanal = sesionesMesReferencia.isEmpty() ? 0.0 :
+                calcularPesoTotal(sesionesMesReferencia) / 4.0; // Aproximado por 4 semanas
+
+        // Determinar tendencia basada en progresión de fuerza
+        String tendencia = determinarTendenciaPorFuerza(userId, todasLasSesiones);
+
+        Map<String, Object> evolucionMensualData = Map.of(
+                "meses", meses,
+                "pesoUsuario", pesoUsuarioPorMes,
+                "pesoInicialUsuario", usuario.getInitialWeight(),
+                "pesoFinalUsuario", usuario.getActualWeight(),
+                "tendencia", tendencia,
+                "promedioFuerzaSemanal", Math.round(promedioFuerzaSemanal * 100.0) / 100.0
+        );
+
+        // ============================================
+        // 📦 RESPUESTA FINAL
+        // ============================================
 
         return Map.of(
-                "progresoSemanal", estaSemana,
-                "progresoMensual", esteMes,
-                "historialSemanas", ultimasSemanas,
-                "usuario", Map.of(
-                        "id", usuario.getId(),
-                        "nombre", usuario.getUsername(),
-                        "pesoActual", usuario.getActualWeight(),
-                        "nivel", usuario.getLevel()
-                )
+                "metricsData", metricsData,
+                "progresoSemanalData", progresoSemanalData,
+                "evolucionMensualData", evolucionMensualData
         );
     }
 
-    @Transactional
-    public Map<String, Object> obtenerEstadisticasUsuario(Long userId) {
-        List<WorkoutSession> todasSesiones = workoutSessionRepository.findByUserId(userId);
+// ============================================
+// 🔧 MÉTODOS AUXILIARES
+// ============================================
 
-        long totalSesionesCompletadas = todasSesiones.stream()
+    private double calcularPesoTotal(List<WorkoutSession> sesiones) {
+        return sesiones.stream()
+                .flatMap(s -> s.getSetRecords().stream())
+                .mapToDouble(sr -> sr.getWeightUsed() * sr.getRealRepetitions())
+                .sum();
+    }
+
+// Nota: El método calcularProgresoFuerzaSimple ya existe en tu código
+
+    private String determinarTendenciaPorFuerza(Long userId, List<WorkoutSession> todasLasSesiones) {
+        // Obtener las últimas 6 semanas de entrenamientos
+        LocalDate ahora = LocalDate.now();
+        List<Double> fuerzaPorSemana = new ArrayList<>();
+
+        for (int i = 5; i >= 0; i--) {
+            LocalDate inicioSemana = ahora.minusWeeks(i).with(DayOfWeek.MONDAY);
+            LocalDate finSemana = ahora.minusWeeks(i).with(DayOfWeek.SUNDAY);
+
+            List<WorkoutSession> sesionesSemana = todasLasSesiones.stream()
+                    .filter(s -> !s.getDate().isBefore(inicioSemana) && !s.getDate().isAfter(finSemana))
+                    .collect(Collectors.toList());
+
+            double pesoTotalSemana = calcularPesoTotal(sesionesSemana);
+            fuerzaPorSemana.add(pesoTotalSemana);
+        }
+
+        // Filtrar semanas con entrenamientos
+        List<Double> semanasConDatos = fuerzaPorSemana.stream()
+                .filter(f -> f > 0)
+                .collect(Collectors.toList());
+
+        if (semanasConDatos.size() < 2) return "INICIANDO";
+
+        // Comparar primeras 2 semanas vs últimas 2 semanas
+        int mitad = semanasConDatos.size() / 2;
+
+        double promedioInicio = semanasConDatos.subList(0, Math.min(2, mitad)).stream()
+                .mapToDouble(Double::doubleValue)
+                .average()
+                .orElse(0);
+
+        double promedioFinal = semanasConDatos.subList(
+                        Math.max(semanasConDatos.size() - 2, mitad),
+                        semanasConDatos.size()
+                ).stream()
+                .mapToDouble(Double::doubleValue)
+                .average()
+                .orElse(0);
+
+        if (promedioInicio == 0) return "INICIANDO";
+
+        double cambioFuerza = ((promedioFinal - promedioInicio) / promedioInicio) * 100;
+
+        // Clasificación de tendencia
+        if (cambioFuerza > 5.0) return "MEJORANDO";      // +8% de fuerza
+        if (cambioFuerza < -5.0) return "BAJANDO";       // -8% de fuerza
+        return "ESTABLE";                                 // Entre -8% y +8%
+    }
+    @Transactional
+    public UserStatsResponseDTO obtenerEstadisticasBasicas(Long userId) {
+        User usuario = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        List<WorkoutSession> sesiones = workoutSessionRepository.findByUserId(userId);
+
+        LocalDate ahora = LocalDate.now();
+        LocalDate inicioMes = ahora.withDayOfMonth(1);
+
+        // 1️⃣ Entrenamientos este mes
+        long entrenamientosEsteMes = sesiones.stream()
                 .filter(WorkoutSession::isCompleted)
+                .filter(s -> !s.getDate().isBefore(inicioMes))
                 .count();
 
-        // MÉTRICAS QUE IMPORTAN ✅
-        double porcentajeConsistencia = calcularConsistencia(todasSesiones);
-        double frecuenciaSemanal = calcularFrecuenciaSemanal(todasSesiones);
-        Map<String, Double> progresoEjerciciosClave = calcularProgresoEjerciciosClave(userId, todasSesiones);
-        String nivelConsistencia = evaluarNivelConsistencia(porcentajeConsistencia);
-        String recomendacion = generarRecomendacion(porcentajeConsistencia, frecuenciaSemanal);
+        // 2️⃣ Peso total levantado
+        double pesoTotalLevantado = sesiones.stream()
+                .flatMap(s -> s.getSetRecords() != null ? s.getSetRecords().stream() : java.util.stream.Stream.empty())
+                .mapToDouble(sr -> sr.getWeightUsed() * sr.getRealRepetitions())
+                .sum();
 
-        User usuario = userRepository.findById(userId).orElseThrow();
+        // 3️⃣ Racha actual (basada en el nivel del usuario)
+        int sesionesRequeridas;
+        switch (usuario.getLevel()) {
+            case CONSTANTE -> sesionesRequeridas = 3;
+            case DESAFIANTE -> sesionesRequeridas = 4;
+            default -> sesionesRequeridas = 2;
+        }
 
-        Map<String, Object> estadisticas = new HashMap<>();
+        int racha = 0;
+        LocalDate hoy = LocalDate.now();
 
-// DATOS BÁSICOS
-        estadisticas.put("totalSesionesCompletadas", totalSesionesCompletadas);
-        estadisticas.put("semanasEntrenando", usuario.getWeeksTrained());
-        estadisticas.put("progresoPeso", Math.round((usuario.getActualWeight() - usuario.getInitialWeight()) * 100.0) / 100.0);
-        estadisticas.put("nivelActual", usuario.getLevel());
-        estadisticas.put("pesoInicial", usuario.getInitialWeight());
-        estadisticas.put("pesoActual", usuario.getActualWeight());
-        estadisticas.put("consistencia", Math.round(porcentajeConsistencia) + "%");
-        estadisticas.put("frecuenciaSemanal", Math.round(frecuenciaSemanal * 10.0) / 10.0 + " días/semana");
-        estadisticas.put("nivelConsistencia", nivelConsistencia);
-        estadisticas.put("progresoFuerza", progresoEjerciciosClave);
-        estadisticas.put("recomendacion", recomendacion);
+        // analizamos las últimas 8 semanas
+        for (int i = 0; i < 8; i++) {
+            LocalDate inicioSemana = hoy.minusWeeks(i).with(java.time.DayOfWeek.MONDAY);
+            LocalDate finSemana = hoy.minusWeeks(i).with(java.time.DayOfWeek.SUNDAY);
 
-        return estadisticas;
+            long sesionesCompletadas = sesiones.stream()
+                    .filter(WorkoutSession::isCompleted)
+                    .filter(s -> !s.getDate().isBefore(inicioSemana) && !s.getDate().isAfter(finSemana))
+                    .count();
+
+            if (sesionesCompletadas >= sesionesRequeridas) {
+                racha++;
+            } else {
+                break;
+            }
+        }
+
+        return new UserStatsResponseDTO(
+                (int) entrenamientosEsteMes,
+                racha,
+                pesoTotalLevantado
+        );
     }
 
 
+    // ---------------------------------------------------------
+    // 🔹 MÉTODOS DE CÁLCULO
+    // ---------------------------------------------------------
     private ProgresoSemanalDTO calcularProgresoSemanal(List<WorkoutSession> sesiones, LocalDate inicio, LocalDate fin, Long userId) {
         ProgresoSemanalDTO progreso = new ProgresoSemanalDTO();
         progreso.setSemanaInicio(inicio);
         progreso.setSemanaFin(fin);
 
         if (sesiones.isEmpty()) {
-            User usuario = userRepository.findById(userId).orElseThrow();
-            return crearProgresoSemanalVacio(inicio, fin, usuario.getActualWeight());
+            User user = userRepository.findById(userId).orElseThrow();
+            return crearProgresoSemanalVacio(inicio, fin, user.getActualWeight());
         }
 
-        // Calcular métricas de entrenamiento
         double totalPeso = 0;
         int totalReps = 0;
         int totalSets = 0;
 
         for (WorkoutSession sesion : sesiones) {
-            for (ExerciseExecution ejecucion : sesion.getExerciseExecutions()) {
-                for (SetRecord serie : ejecucion.getSetRecords()) {
-                    totalPeso += serie.getWeightUsed() * serie.getRealRepetitions();
-                    totalReps += serie.getRealRepetitions();
-                    totalSets++;
-                }
+            for (SetRecord serie : sesion.getSetRecords()) {
+                totalPeso += serie.getWeightUsed() * serie.getRealRepetitions();
+                totalReps += serie.getRealRepetitions();
+                totalSets++;
             }
         }
 
@@ -209,163 +322,142 @@ public class ProgressService {
         progreso.setEntrenamientosCompletados(sesiones.size());
         progreso.setVolumenEntrenamiento(Math.round(totalPeso * 100.0) / 100.0);
 
-        User usuario = userRepository.findById(userId).orElseThrow();
-        progreso.setPesoPromedioUsuario(usuario.getActualWeight());
-
-        // Calcular progreso de fuerza simple
+        User user = userRepository.findById(userId).orElseThrow();
+        progreso.setPesoPromedioUsuario(user.getActualWeight());
         progreso.setProgresoFuerza(calcularProgresoFuerzaSimple(sesiones));
 
         return progreso;
     }
 
-    private Double calcularProgresoFuerzaSimple(List<WorkoutSession> sesionesActuales) {
-        if (sesionesActuales.isEmpty()) return 0.0;
+    private Double calcularProgresoFuerzaSimple(List<WorkoutSession> sesiones) {
+        if (sesiones.isEmpty()) return 0.0;
 
-        // Calcular volumen promedio por entrenamiento
-        double volumenTotal = 0;
-        for (WorkoutSession sesion : sesionesActuales) {
-            double volumenSesion = 0;
-            for (ExerciseExecution ejecucion : sesion.getExerciseExecutions()) {
-                for (SetRecord serie : ejecucion.getSetRecords()) {
-                    volumenSesion += serie.getWeightUsed() * serie.getRealRepetitions();
-                }
-            }
-            volumenTotal += volumenSesion;
-        }
+        double volumenTotal = sesiones.stream()
+                .flatMap(s -> s.getSetRecords().stream())
+                .mapToDouble(s -> s.getWeightUsed() * s.getRealRepetitions())
+                .sum();
 
-        double volumenPromedio = volumenTotal / sesionesActuales.size();
+        double promedio = volumenTotal / sesiones.size();
 
-        // Simular progreso basado en datos
-        if (volumenPromedio > 1000) return 15.5;
-        if (volumenPromedio > 500) return 8.2;
+        if (promedio > 1000) return 15.5;
+        if (promedio > 500) return 8.2;
         return 2.1;
     }
 
-    private ProgresoSemanalDTO crearProgresoSemanalVacio(LocalDate inicio, LocalDate fin, Double pesoUsuario) {
-        ProgresoSemanalDTO progreso = new ProgresoSemanalDTO();
-        progreso.setSemanaInicio(inicio);
-        progreso.setSemanaFin(fin);
-        progreso.setTotalPesoLevantado(0.0);
-        progreso.setTotalRepeticiones(0);
-        progreso.setTotalSeriesCompletadas(0);
-        progreso.setEntrenamientosCompletados(0);
-        progreso.setProgresoFuerza(0.0);
-        progreso.setVolumenEntrenamiento(0.0);
-        progreso.setPesoPromedioUsuario(pesoUsuario);
-        return progreso;
+    private ProgresoSemanalDTO crearProgresoSemanalVacio(LocalDate inicio, LocalDate fin, Double peso) {
+        ProgresoSemanalDTO dto = new ProgresoSemanalDTO();
+        dto.setSemanaInicio(inicio);
+        dto.setSemanaFin(fin);
+        dto.setTotalPesoLevantado(0.0);
+        dto.setTotalRepeticiones(0);
+        dto.setTotalSeriesCompletadas(0);
+        dto.setEntrenamientosCompletados(0);
+        dto.setProgresoFuerza(0.0);
+        dto.setVolumenEntrenamiento(0.0);
+        dto.setPesoPromedioUsuario(peso);
+        return dto;
     }
 
     private String determinarTendencia(List<ProgresoSemanalDTO> semanas) {
         if (semanas.size() < 2) return "INICIANDO";
 
-        // Analizar tendencia basada en el volumen
-        double volumenPrimera = semanas.get(semanas.size() - 1).getVolumenEntrenamiento();
-        double volumenUltima = semanas.get(0).getVolumenEntrenamiento();
+        double primero = semanas.get(semanas.size() - 1).getVolumenEntrenamiento();
+        double ultimo = semanas.get(0).getVolumenEntrenamiento();
 
-        if (volumenUltima > volumenPrimera * 1.1) return "MEJORANDO";
-        if (volumenUltima < volumenPrimera * 0.9) return "BAJANDO";
+        if (ultimo > primero * 1.1) return "MEJORANDO";
+        if (ultimo < primero * 0.9) return "BAJANDO";
         return "ESTABLE";
     }
 
-
-    private double calcularConsistencia(List<WorkoutSession> sesiones) {
-        if (sesiones.isEmpty()) return 0.0;
-
-        long sesionesCompletadas = sesiones.stream()
-                .filter(WorkoutSession::isCompleted)
-                .count();
-
-        return (double) sesionesCompletadas / sesiones.size() * 100;
+    private String calcularTendenciaMes(double promedio) {
+        if (promedio >= 10) return "EXCELENTE";
+        if (promedio >= 7) return "BIEN";
+        if (promedio >= 5) return "NORMAL";
+        return "INICIANDO";
     }
 
-    private double calcularFrecuenciaSemanal(List<WorkoutSession> sesiones) {
-        List<WorkoutSession> sesionesCompletadas = sesiones.stream()
-                .filter(WorkoutSession::isCompleted)
-                .collect(Collectors.toList());
 
-        if (sesionesCompletadas.isEmpty()) return 0.0;
+    public ComparacionDosMesesDTO compararDosMeses(
+            Long userId,
+            int mes1, int año1,
+            int mes2, int año2
+    ) {
+        MesComparacionDTO datosMes1 = calcularDatosMes(userId, mes1, año1);
+        MesComparacionDTO datosMes2 = calcularDatosMes(userId, mes2, año2);
 
-        // Calcular semanas entre primera y última sesión
-        LocalDate primeraSesion = sesionesCompletadas.stream()
-                .map(WorkoutSession::getDate)
-                .min(LocalDate::compareTo)
-                .orElse(LocalDate.now());
-
-        LocalDate ultimaSesion = sesionesCompletadas.stream()
-                .map(WorkoutSession::getDate)
-                .max(LocalDate::compareTo)
-                .orElse(LocalDate.now());
-
-        long semanasTotales = ChronoUnit.WEEKS.between(primeraSesion, ultimaSesion) + 1;
-        if (semanasTotales == 0) semanasTotales = 1;
-
-        return (double) sesionesCompletadas.size() / semanasTotales;
+        return new ComparacionDosMesesDTO(datosMes1, datosMes2);
     }
 
-    private Map<String, Double> calcularProgresoEjerciciosClave(Long userId, List<WorkoutSession> sesiones) {
-        Map<String, Double> progreso = new HashMap<>();
 
-        // Agrupar sesiones por ejercicio
-        Map<String, List<Double>> maxPesosPorEjercicio = new HashMap<>();
+    // ------------------------------------------------------------
+// Cálculo por mes
+// ------------------------------------------------------------
+    private MesComparacionDTO calcularDatosMes(Long userId, int mes, int año) {
 
-        for (WorkoutSession sesion : sesiones) {
-            if (!sesion.isCompleted()) continue;
+        // 1. Obtener sesiones del mes
+        List<WorkoutSession> sesiones = workoutSessionRepository.findByUserIdAndMonth(userId, mes, año);
 
-            for (ExerciseExecution ejecucion : sesion.getExerciseExecutions()) {
-                String ejercicio = ejecucion.getExercise().getName();
+        // 2. Obtener rango de fechas del mes
+        LocalDate inicioMes = LocalDate.of(año, mes, 1);
+        LocalDate finMes = inicioMes.withDayOfMonth(inicioMes.lengthOfMonth());
 
-                // Encontrar el peso máximo en esta sesión para este ejercicio
-                double maxPesoSesion = ejecucion.getSetRecords().stream()
-                        .mapToDouble(SetRecord::getWeightUsed)
-                        .max()
-                        .orElse(0.0);
+        // 3. Obtener registros de peso del mes
+        List<WeightRecord> pesosMes = weightRecordRepository.findByUserAndMonth(userId, inicioMes, finMes);
 
-                maxPesosPorEjercicio
-                        .computeIfAbsent(ejercicio, k -> new ArrayList<>())
-                        .add(maxPesoSesion);
-            }
-        }
+        // 4. Calcular peso inicial y final del mes
+        double pesoInicial = pesosMes.isEmpty()
+                ? obtenerUltimoPesoAntes(userId, inicioMes)          // Si no hay pesos ese mes
+                : pesosMes.get(0).getWeight();
 
-        // Calcular progreso para cada ejercicio
-        for (Map.Entry<String, List<Double>> entry : maxPesosPorEjercicio.entrySet()) {
-            String ejercicio = entry.getKey();
-            List<Double> pesos = entry.getValue();
+        double pesoFinal = pesosMes.isEmpty()
+                ? obtenerUltimoPesoAntes(userId, finMes)            // Último peso conocido
+                : pesosMes.get(pesosMes.size() - 1).getWeight();
 
-            if (pesos.size() >= 2) {
-                // Progreso = (último peso - primer peso) / primer peso * 100
-                double primerPeso = pesos.get(0);
-                double ultimoPeso = pesos.get(pesos.size() - 1);
+        double cambioPeso = pesoFinal - pesoInicial;
 
-                double progresoCalculado = 0;
-                if (primerPeso > 0) {
-                    progresoCalculado = ((ultimoPeso - primerPeso) / primerPeso) * 100;
-                }
+        // 5. Cálculo de métricas
+        double totalPesoLevantado = calcularPesoTotal(sesiones);
+        int totalEntrenamientos = sesiones.size();
+        double promedioFuerzaSemanal = calcularProgresoFuerzaSimple(sesiones);
+        String tendencia = calcularTendenciaMes(promedioFuerzaSemanal);
 
-                progreso.put(ejercicio, Math.round(progresoCalculado * 10.0) / 10.0);
-            } else {
-                progreso.put(ejercicio, 0.0);
-            }
-        }
+        // 6. Nombre del mes
+        String nombreMes = nombreMesCompleto(mes) + " " + año;
 
-        return progreso;
+        return new MesComparacionDTO(
+                nombreMes,
+                pesoInicial,
+                pesoFinal,
+                cambioPeso,
+                totalPesoLevantado,
+                totalEntrenamientos,
+                promedioFuerzaSemanal,
+                tendencia
+        );
     }
+    private double obtenerUltimoPesoAntes(Long userId, LocalDate fecha) {
+        WeightRecord last = weightRecordRepository.findTopByUserIdAndDateBeforeOrderByDateDesc(userId, fecha);
+        if (last != null) return last.getWeight();
 
-    private String evaluarNivelConsistencia(double porcentaje) {
-        if (porcentaje >= 90) return "EXCELENTE";
-        if (porcentaje >= 75) return "BUENA";
-        if (porcentaje >= 60) return "REGULAR";
-        return "A MEJORAR";
+        // Si no hay registros, usar peso inicial del usuario
+        User u = userRepository.findById(userId).orElseThrow();
+        return u.getInitialWeight();
     }
-
-    private String generarRecomendacion(double consistencia, double frecuencia) {
-        if (consistencia < 60) {
-            return "Enfócate en ser más constante. Programa menos días pero cúmplelos.";
-        } else if (frecuencia < 3) {
-            return "Buen trabajo en consistencia. Intenta aumentar a 3-4 días por semana.";
-        } else if (consistencia >= 85) {
-            return "¡Excelente disciplina! Considera aumentar la intensidad o variar ejercicios.";
-        } else {
-            return "Vas por buen camino. Mantén este ritmo y sigue progresando.";
-        }
+    private String nombreMesCompleto(int mes) {
+        return switch (mes) {
+            case 1 -> "Enero";
+            case 2 -> "Febrero";
+            case 3 -> "Marzo";
+            case 4 -> "Abril";
+            case 5 -> "Mayo";
+            case 6 -> "Junio";
+            case 7 -> "Julio";
+            case 8 -> "Agosto";
+            case 9 -> "Septiembre";
+            case 10 -> "Octubre";
+            case 11 -> "Noviembre";
+            case 12 -> "Diciembre";
+            default -> "Desconocido";
+        };
     }
 }

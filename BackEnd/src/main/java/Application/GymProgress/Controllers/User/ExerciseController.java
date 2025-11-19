@@ -25,5 +25,10 @@ public class ExerciseController {
     public ResponseEntity<Exercise> getExerciseById(@PathVariable Long id) {
         return ResponseEntity.ok(exerciseService.getExerciseById(id));
     }
+    @GetMapping("/routine/{routineId}")
+    public ResponseEntity<List<Exercise>> getExercisesByRoutine(@PathVariable Long routineId) {
+        List<Exercise> exercises = exerciseService.getExercisesByRoutine(routineId);
+        return ResponseEntity.ok(exercises);
+    }
 
 }

@@ -23,7 +23,11 @@ public class SetRecord {
     private Boolean easyComplete;
 
     @ManyToOne
-    @JoinColumn(name = "exercise_execution_id", nullable = false)
+    @JoinColumn(name = "workout_session_id", nullable = false)
     @JsonIgnore
-    private ExerciseExecution exerciseExecution;
+    private WorkoutSession workoutSession;
+
+    @ManyToOne
+    @JoinColumn(name = "exercise_id", nullable = false)
+    private Exercise exercise;
 }

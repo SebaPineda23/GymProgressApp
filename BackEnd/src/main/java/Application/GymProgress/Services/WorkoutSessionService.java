@@ -1,6 +1,5 @@
 package Application.GymProgress.Services;
 
-
 import Application.GymProgress.DTOs.SetRecordRequestDTO;
 import Application.GymProgress.DTOs.WorkoutSessionRequestDTO;
 import Application.GymProgress.DTOs.WorkoutSessionResponseDTO;
@@ -11,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -22,7 +22,6 @@ public class WorkoutSessionService {
     private final UserRepository userRepository;
     private final RoutineRepository routineRepository;
     private final ExerciseRepository exerciseRepository;
-    private final ExerciseExecutionRepository exerciseExecutionRepository;
     private final SetRecordRepository setRecordRepository;
 
     @Transactional
@@ -39,21 +38,10 @@ public class WorkoutSessionService {
                 .completed(false)
                 .user(user)
                 .routine(routine)
+                .setRecords(Collections.emptyList())
                 .build();
 
-        // Crear ExerciseExecutions para cada ejercicio de la rutina
-        List<ExerciseExecution> executions = routine.getExerciseList().stream()
-                .map(exercise -> ExerciseExecution.builder()
-                        .workoutSession(session)
-                        .exercise(exercise)
-                        .plannedSets(3) // Valor por defecto, puedes personalizar
-                        .plannedReps(10) // Valor por defecto, puedes personalizar
-                        .build())
-                .collect(Collectors.toList());
-
-        session.setExerciseExecutions(executions);
         WorkoutSession saved = workoutSessionRepository.save(session);
-
         return mapToResponseDTO(saved);
     }
 
@@ -65,35 +53,25 @@ public class WorkoutSessionService {
         Exercise exercise = exerciseRepository.findById(request.getExerciseId())
                 .orElseThrow(() -> new RuntimeException("Ejercicio no encontrado"));
 
-        // Buscar o crear ExerciseExecution
-        ExerciseExecution execution = session.getExerciseExecutions().stream()
-                .filter(exe -> exe.getExercise().getId().equals(exercise.getId()))
-                .findFirst()
-                .orElseGet(() -> {
-                    ExerciseExecution newExe = ExerciseExecution.builder()
-                            .workoutSession(session)
-                            .exercise(exercise)
-                            .plannedSets(3)
-                            .plannedReps(10)
-                            .build();
-                    session.getExerciseExecutions().add(newExe);
-                    return newExe;
-                });
-
-        // Crear SetRecord
         SetRecord setRecord = SetRecord.builder()
                 .setNumber(request.getSetNumber())
                 .weightUsed(request.getWeightUsed())
                 .realRepetitions(request.getRealRepetitions())
                 .difficultyPerceived(request.getDifficultyPerceived())
                 .easyComplete(request.getEasyComplete())
-                .exerciseExecution(execution)
+                .exercise(exercise)
+                .workoutSession(session)
                 .build();
 
-        execution.getSetRecords().add(setRecord);
-        WorkoutSession updated = workoutSessionRepository.save(session);
+        setRecordRepository.save(setRecord);
+        if (session.getSetRecords() == null) {
+            session.setSetRecords(List.of(setRecord));
+        } else {
+            session.getSetRecords().add(setRecord);
+        }
 
-        return mapToResponseDTO(updated);
+        // Actualizamos la sesión en respuesta
+        return mapToResponseDTO(session);
     }
 
     public WorkoutSessionResponseDTO getWorkoutSession(Long id) {
@@ -117,9 +95,11 @@ public class WorkoutSessionService {
         return mapToResponseDTO(updated);
     }
 
+
     public void deleteWorkoutSession(Long id) {
         workoutSessionRepository.deleteById(id);
     }
+
 
     private WorkoutSessionResponseDTO mapToResponseDTO(WorkoutSession session) {
         WorkoutSessionResponseDTO dto = new WorkoutSessionResponseDTO();
@@ -128,42 +108,19 @@ public class WorkoutSessionService {
         dto.setNotes(session.getNotes());
         dto.setCompleted(session.isCompleted());
 
-        // Mapear rutina
+        // Mapeo de rutina
         WorkoutSessionResponseDTO.RoutineDTO routineDTO = new WorkoutSessionResponseDTO.RoutineDTO();
         routineDTO.setId(session.getRoutine().getId());
         routineDTO.setName(session.getRoutine().getName());
         routineDTO.setObjective(session.getRoutine().getObjective());
         dto.setRoutine(routineDTO);
 
-        // Mapear ejecuciones de ejercicios
-        List<WorkoutSessionResponseDTO.ExerciseExecutionDTO> executionDTOs = session.getExerciseExecutions().stream()
-                .map(this::mapToExerciseExecutionDTO)
-                .collect(Collectors.toList());
-        dto.setExerciseExecutions(executionDTOs);
-
-        return dto;
-    }
-
-    private WorkoutSessionResponseDTO.ExerciseExecutionDTO mapToExerciseExecutionDTO(ExerciseExecution execution) {
-        WorkoutSessionResponseDTO.ExerciseExecutionDTO dto = new WorkoutSessionResponseDTO.ExerciseExecutionDTO();
-        dto.setId(execution.getId());
-        dto.setPlannedSets(execution.getPlannedSets());
-        dto.setPlannedReps(execution.getPlannedReps());
-
-        // Mapear ejercicio
-        WorkoutSessionResponseDTO.ExerciseDTO exerciseDTO = new WorkoutSessionResponseDTO.ExerciseDTO();
-        exerciseDTO.setId(execution.getExercise().getId());
-        exerciseDTO.setName(execution.getExercise().getName());
-        exerciseDTO.setDescription(execution.getExercise().getDescription());
-        exerciseDTO.setMuscleGroupSet(execution.getExercise().getMuscleGroupSet().stream()
-                .map(Enum::name)
-                .collect(Collectors.toList()));
-        dto.setExercise(exerciseDTO);
-
-        // Mapear sets
-        List<WorkoutSessionResponseDTO.SetRecordDTO> setDTOs = execution.getSetRecords().stream()
-                .map(this::mapToSetRecordDTO)
-                .collect(Collectors.toList());
+        // Mapeo de sets (ahora directos)
+        List<WorkoutSessionResponseDTO.SetRecordDTO> setDTOs =
+                (session.getSetRecords() == null ? Collections.<SetRecord>emptyList() : session.getSetRecords())
+                        .stream()
+                        .map(this::mapToSetRecordDTO)
+                        .collect(Collectors.toList());
         dto.setSetRecords(setDTOs);
 
         return dto;
@@ -177,6 +134,16 @@ public class WorkoutSessionService {
         dto.setRealRepetitions(setRecord.getRealRepetitions());
         dto.setDifficultyPerceived(setRecord.getDifficultyPerceived());
         dto.setEasyComplete(setRecord.getEasyComplete());
+
+        // Mapeamos el ejercicio directamente
+        WorkoutSessionResponseDTO.ExerciseDTO exerciseDTO = new WorkoutSessionResponseDTO.ExerciseDTO();
+        exerciseDTO.setId(setRecord.getExercise().getId());
+        exerciseDTO.setName(setRecord.getExercise().getName());
+        exerciseDTO.setDescription(setRecord.getExercise().getDescription());
+        exerciseDTO.setMuscleGroupSet(setRecord.getExercise().getMuscleGroupSet()
+                .stream().map(Enum::name).collect(Collectors.toList()));
+        dto.setExercise(exerciseDTO);
+
         return dto;
     }
 }

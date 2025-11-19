@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Collections;
 import java.util.List;
 
 
@@ -22,12 +23,14 @@ public class RoutineController {
 
     private final RoutineService routineService;
 
-    @GetMapping
-    public ResponseEntity<List<Routine>> getRutinasUsuario(
-            @AuthenticationPrincipal(expression = "user") User currentUser
-    ) {
-        List<Routine> rutinas = routineService.getRoutinesByUser(currentUser);
-        return ResponseEntity.ok(rutinas);
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<List<Routine>> getRutinasUsuario(@PathVariable Long userId) {
+        try {
+            List<Routine> rutinas = routineService.getRoutinesByUserId(userId);
+            return ResponseEntity.ok(rutinas);
+        } catch (RuntimeException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.emptyList());
+        }
     }
 
     @GetMapping("/{id}")

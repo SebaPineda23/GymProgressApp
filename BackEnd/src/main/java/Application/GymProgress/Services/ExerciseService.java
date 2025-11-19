@@ -21,6 +21,9 @@ public class ExerciseService {
         return exerciseRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Ejercicio no encontrado"));
     }
+    public List<Exercise> getExercisesByRoutine(Long routineId) {
+        return exerciseRepository.findByRoutineId(routineId);
+    }
 
     public Exercise createExercise(Exercise exercise) {
         return exerciseRepository.save(exercise);

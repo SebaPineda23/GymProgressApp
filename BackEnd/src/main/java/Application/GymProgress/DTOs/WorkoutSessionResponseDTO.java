@@ -1,6 +1,5 @@
 package Application.GymProgress.DTOs;
 
-
 import lombok.Data;
 import java.time.LocalDate;
 import java.util.List;
@@ -12,22 +11,13 @@ public class WorkoutSessionResponseDTO {
     private String notes;
     private Boolean completed;
     private RoutineDTO routine;
-    private List<ExerciseExecutionDTO> exerciseExecutions;
+    private List<SetRecordDTO> setRecords;
 
     @Data
     public static class RoutineDTO {
         private Long id;
         private String name;
         private String objective;
-    }
-
-    @Data
-    public static class ExerciseExecutionDTO {
-        private Long id;
-        private ExerciseDTO exercise;
-        private Integer plannedSets;
-        private Integer plannedReps;
-        private List<SetRecordDTO> setRecords;
     }
 
     @Data
@@ -46,5 +36,6 @@ public class WorkoutSessionResponseDTO {
         private Integer realRepetitions;
         private Integer difficultyPerceived;
         private Boolean easyComplete;
+        private ExerciseDTO exercise; // 🔹 ahora se asocia directo al ejercicio
     }
 }

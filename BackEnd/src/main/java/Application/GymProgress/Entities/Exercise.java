@@ -2,6 +2,7 @@ package Application.GymProgress.Entities;
 
 import Application.GymProgress.Enum.Level;
 import Application.GymProgress.Enum.MuscleGroup;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -31,4 +32,10 @@ public class Exercise {
     private Set<MuscleGroup> muscleGroupSet;
     @Enumerated(EnumType.STRING)
     private Level level;
+    @ManyToMany(mappedBy = "exerciseList")
+    @JsonIgnore
+    private List<Routine> routines;
+    @OneToMany(mappedBy = "exercise", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    private List<SetRecord> setRecords;
 }

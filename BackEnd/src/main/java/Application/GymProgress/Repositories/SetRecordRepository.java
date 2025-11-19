@@ -7,5 +7,4 @@ import java.util.List;
 
 @Repository
 public interface SetRecordRepository extends JpaRepository<SetRecord, Long> {
-    List<SetRecord> findByExerciseExecutionId(Long exerciseExecutionId);
 }

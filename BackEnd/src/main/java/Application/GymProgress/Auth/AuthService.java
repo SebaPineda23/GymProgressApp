@@ -5,7 +5,6 @@ import Application.GymProgress.Enum.Level;
 import Application.GymProgress.Enum.Role;
 import Application.GymProgress.Jwt.JwtService;
 import Application.GymProgress.Login.LoginRequest;
-import Application.GymProgress.RegisterRequest.AdminRegisterRequest;
 import Application.GymProgress.RegisterRequest.RegisterRequest;
 import Application.GymProgress.Repositories.UserRepository;
 import Application.GymProgress.Services.UserService;
@@ -17,7 +16,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -46,6 +44,7 @@ public class AuthService {
 
             return AuthResponseLogin.builder()
                     .id(user.getId())
+                    .name(user.getName())
                     .userName(user.getUsername())
                     .lastName(user.getLastName())
                     .email(user.getEmail())
@@ -61,33 +60,38 @@ public class AuthService {
 
     @Transactional
     public AuthResponseRegister register(RegisterRequest request) {
-        // Validar que el userName no exista
+        // 🔹 Validar que el userName no exista
         if (userRepository.findByUserName(request.getUserName()).isPresent()) {
             throw new RuntimeException("El nombre de usuario ya existe");
         }
 
-        // Validar que el email no exista
+        // 🔹 Validar que el email no exista
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new RuntimeException("El email ya está registrado");
         }
 
+        // 🔹 Asignar rol USER por defecto
         Set<Role> roles = new HashSet<>();
-        roles.add(Role.USER); // ← Solo rol USER para registro normal
+        roles.add(Role.USER);
 
+        // 🔹 Crear el nuevo usuario
         User user = User.builder()
                 .userName(request.getUserName())
+                .name(request.getName())
                 .lastName(request.getLastName())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
-                .level(Level.PRINCIPIANTE)
+                .level(Level.SANO)
                 .initialWeight(request.getInitialWeight())
                 .actualWeight(request.getInitialWeight())
                 .active(true)
                 .roleSet(roles)
                 .build();
 
+        // 🔹 Guardar en base de datos
         userRepository.save(user);
 
+        // 🔹 Retornar el token JWT generado
         return AuthResponseRegister.builder()
                 .token(jwtService.getToken(user))
                 .build();
@@ -109,11 +113,12 @@ public class AuthService {
         roles.add(Role.USER);
 
         User user = User.builder()
+                .name(request.getName())
                 .userName(request.getUserName())
                 .lastName(request.getLastName())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
-                .level(Level.AVANZADO)
+                .level(Level.SANO)
                 .initialWeight(request.getInitialWeight())
                 .actualWeight(request.getInitialWeight())
                 .active(true)
@@ -133,7 +138,8 @@ public class AuthService {
     }
 
     private void validateRegisterRequest(RegisterRequest request) {
-        if(request.getUserName() == null || request.getUserName().isEmpty()) throw new IllegalArgumentException("Nombre obligatorio");
+        if(request.getName() == null || request.getName().isEmpty()) throw new IllegalArgumentException("Nombre obligatorio");
+        if(request.getUserName() == null || request.getUserName().isEmpty()) throw new IllegalArgumentException("Nombre de usuario obligatorio");
         if(request.getLastName() == null || request.getLastName().isEmpty()) throw new IllegalArgumentException("Apellido obligatorio");
         if(request.getEmail() == null || request.getEmail().isEmpty()) throw new IllegalArgumentException("Email obligatorio");
         if(request.getPassword() == null || request.getPassword().isEmpty()) throw new IllegalArgumentException("Contraseña obligatoria");

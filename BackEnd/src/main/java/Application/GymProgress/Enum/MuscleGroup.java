@@ -15,13 +15,11 @@ public enum MuscleGroup {
     TRAPECIO,
     ANTEBRAZOS,
     DELTOIDES,
-
-    // Grupos compuestos
-    UPPER_BODY,      // Torso completo
-    LOWER_BODY,      // Piernas y glúteos
-    PUSH_MUSCLES,    // Pectoral, hombros, tríceps
-    PULL_MUSCLES,    // Espalda, bíceps
-    CORE,            // Abs, oblícuos, lumbar
-    FULL_BODY,       // Ejercicios compuestos
+    UPPER_BODY,
+    LOWER_BODY,
+    PUSH_MUSCLES,
+    PULL_MUSCLES,
+    CORE,
+    FULL_BODY,
     CARDIO
 }

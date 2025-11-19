@@ -47,8 +47,10 @@ public class RoutineService {
         return routineRepository.save(nuevaRutina);
     }
 
-    public List<Routine> getRoutinesByUser(User user) {
-        return routineRepository.findByUserId(user.getId());
+    public List<Routine> getRoutinesByUserId(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        return routineRepository.findByUser(user);
     }
 
     public Routine getRoutineById(Long id) {
